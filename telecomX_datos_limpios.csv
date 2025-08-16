@@ -1,0 +1,4 @@
+Churn,customer.tenure,account.Contract,account.PaymentMethod,account.Charges.Monthly,account.Charges.Total,internet.OnlineSecurity,internet.TechSupport,internet.StreamingTV,internet.StreamingMovies,account.PaperlessBilling
+1,1,Month-to-month,Electronic check,29.85,29.85,No,No,No,No,Yes
+0,34,One year,Mailed check,56.95,1889.5,Yes,Yes,Yes,Yes,No
+0,2,Month-to-month,Mailed check,53.85,108.15,No,No,No,No,Yes
