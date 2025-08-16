@@ -1,270 +1,159 @@
-# TELECOMX - PREDICCIÓN DE CHURN (Parte 2)
-# Análisis completo: Modelado, Evaluación, Interpretación y Recomendaciones
+# TelecomX - Predicción de Churn de Clientes
 
-# Importar librerías
-import pandas as pd
+> **Análisis de Machine Learning para predecir la cancelación de servicios (churn)**  
+> Parte 2 del proyecto: Modelado, Evaluación e Interpretación
 
-import numpy as np
+---
 
-import matplotlib.pyplot as plt
+## Propósito del Análisis
 
-import seaborn as sns
+El objetivo principal de este proyecto es **predecir el churn (abandono de clientes)** en TelecomX, una empresa de telecomunicaciones, utilizando técnicas de **Machine Learning** y análisis de datos.
 
-import json
+A través de un conjunto de datos que incluye información demográfica, servicios contratados, métodos de pago y cargos, se busca identificar patrones que anteceden la cancelación del servicio. La capacidad de anticipar el churn permite a la empresa implementar **estrategias proactivas de retención**, mejorar la experiencia del cliente y reducir pérdidas de ingresos.
 
-import os
+Este análisis forma parte de una solución integral de inteligencia predictiva para la toma de decisiones estratégicas.
 
-from datetime import datetime
+---
 
-# Configuración de visualización
-sns.set_style("whitegrid")
-plt.rcParams['figure.figsize'] = (12, 8)
-print("Iniciando análisis de churn para TelecomX...\n")
+##  Estructura del Proyecto
+TelecomX-Churn-Prediction/
+│
+├── TelecomX_Data.json # Datos originales en formato JSON (anidados)
+├── telecomx_data_clean.csv # Dataset procesado y aplanado (listo para ML)
+├── notebook_churn_prediction.ipynb # Cuaderno principal con todo el flujo de análisis
+│
+├── visualizaciones/ # Carpeta con gráficos exportados
+│ ├── balanceo_clases.png
+│ ├── correlaciones.png
+│ ├── importancia_variables.png
+│ ├── curvas_roc.png
+│ └── resumen_ejecutivo.png
+│
+├── modelos/ # Modelos entrenados (opcional)
+│ └── best_model.pkl
+│
+└── README.md # Documentación del proyecto
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  1. CARGA Y PREPARACIÓN DE DATOS
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+---
 
-# Verificar archivo
-archivo = 'TelecomX_Data.json'
-if not os.path.exists(archivo):
-    raise FileNotFoundError(f" No se encontró '{archivo}'. Asegúrate de tenerlo en la carpeta.")
+## Proceso de Preparación de Datos
 
-# Cargar datos
-with open(archivo, 'r', encoding='utf-8') as f:
-    raw_data = json.load(f)
+### 1. **Clasificación de Variables**
 
-print(f" Datos cargados: {len(raw_data)} clientes")
+Las variables fueron clasificadas automáticamente en tres categorías:
 
-# Aplanar con pandas
-df = pd.json_normalize(raw_data)
-df = df.rename(columns={
-    'customerID': 'customerID',
-    'Churn': 'Churn',
-    'customer.gender': 'gender',
-    'customer.SeniorCitizen': 'SeniorCitizen',
-    'customer.Partner': 'Partner',
-    'customer.Dependents': 'Dependents',
-    'customer.tenure': 'tenure',
-    'phone.PhoneService': 'PhoneService',
-    'phone.MultipleLines': 'MultipleLines',
-    'internet.InternetService': 'InternetService',
-    'internet.OnlineSecurity': 'OnlineSecurity',
-    'internet.OnlineBackup': 'OnlineBackup',
-    'internet.DeviceProtection': 'DeviceProtection',
-    'internet.TechSupport': 'TechSupport',
-    'internet.StreamingTV': 'StreamingTV',
-    'internet.StreamingMovies': 'StreamingMovies',
-    'account.Contract': 'Contract',
-    'account.PaperlessBilling': 'PaperlessBilling',
-    'account.PaymentMethod': 'PaymentMethod',
-    'account.Charges.Monthly': 'MonthlyCharges',
-    'account.Charges.Total': 'TotalCharges'
-})
+- **Binarias (Yes/No)**:  
+  `PhoneService`, `MultipleLines`, `OnlineSecurity`, `TechSupport`, etc.
 
-# Conversión segura
-for col in ['MonthlyCharges', 'TotalCharges']:
-    df[col] = pd.to_numeric(df[col].astype(str).replace(r'^\s*$', np.nan, regex=True), errors='coerce').fillna(0)
+- **Categóricas Múltiples**:  
+  `InternetService`, `Contract`, `PaymentMethod`, `gender`, etc.
 
-# Eliminar ID
-df_final = df.drop('customerID', axis=1).copy()
-print(f" Datos aplanados y limpios: {df_final.shape}")
+- **Numéricas**:  
+  `tenure`, `MonthlyCharges`, `TotalCharges`.
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  2. PREPARACIÓN PARA MACHINE LEARNING
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+### 2. **Codificación de Variables**
 
-# Separar X e y
-X = df_final.drop('Churn', axis=1)
-y = (df_final['Churn'] == 'Yes').astype(int)
+- **Variables binarias**:  
+  Mapeo: `Yes = 1`, `No = 0`.  
+  Casos especiales (ej. `No internet service`) mapeados a `-1`.
 
-# División estratificada
-from sklearn.model_selection import train_test_split
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y)
+- **Variables categóricas múltiples**:  
+  Codificación **One-Hot Encoding** con `pd.get_dummies()`.
 
-# Codificación binaria
-binary_cols = [col for col in X.columns if set(X[col].dropna().unique()) <= {'Yes', 'No'}]
-for col in binary_cols:
-    X_train[col] = X_train[col].map({'Yes': 1, 'No': 0}).fillna(0).astype(int)
-    X_test[col] = X_test[col].map({'Yes': 1, 'No': 0}).fillna(0).astype(int)
+- **Variable objetivo (`Churn`)**:  
+  Codificada como `No = 0`, `Yes = 1`.
 
-# Codificación especial
-servicios_internet = ['OnlineSecurity', 'OnlineBackup', 'DeviceProtection', 'TechSupport', 'StreamingTV', 'StreamingMovies']
-for col in servicios_internet:
-    if col in X_train.columns:
-        X_train[col] = X_train[col].map({'Yes': 1, 'No': 0, 'No internet service': -1}).fillna(0).astype(int)
-        X_test[col] = X_test[col].map({'Yes': 1, 'No': 0, 'No internet service': -1}).fillna(0).astype(int)
+### 3. **Normalización**
 
-if 'MultipleLines' in X_train.columns:
-    X_train['MultipleLines'] = X_train['MultipleLines'].map({'Yes': 1, 'No': 0, 'No phone service': -1}).fillna(0).astype(int)
-    X_test['MultipleLines'] = X_test['MultipleLines'].map({'Yes': 1, 'No': 0, 'No phone service': -1}).fillna(0).astype(int)
+- **Datos numéricos**:  
+  Estandarizados usando `StandardScaler` para modelos sensibles a escala (Regresión Logística, SVM, KNN).
 
-# One-Hot Encoding
-categorical_cols = ['InternetService', 'Contract', 'PaymentMethod']
-X_train = pd.get_dummies(X_train, columns=categorical_cols, dtype=int)
-X_test = pd.get_dummies(X_test, columns=categorical_cols, dtype=int)
+- **Datos categóricos**:  
+  No normalizados (usados en modelos basados en árboles).
 
-# Alinear columnas
-missing_cols = set(X_train.columns) - set(X_test.columns)
-for col in missing_cols:
-    X_test[col] = 0
-X_test = X_test[X_train.columns]
+### 4. **División de Datos**
 
-# Normalización
-from sklearn.preprocessing import StandardScaler
-scaler = StandardScaler()
-X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train), columns=X_train.columns, index=X_train.index)
-X_test_scaled = pd.DataFrame(scaler.transform(X_test), columns=X_test.columns, index=X_test.index)
+- **70% entrenamiento**, **30% prueba**  
+- Estratificación por la variable `Churn` para mantener la proporción de clases.  
+- Aplicación de **SMOTE** (opcional) para balancear clases si el ratio de desbalance > 2.0.
 
-print(f"🔧 Preparación completada: {X_train.shape[1]} features, {len(X_train)} entrenamiento")
+---
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  3. ENTRENAMIENTO DE MODELOS
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+##  Justificación de Decisiones de Modelización
 
-from sklearn.linear_model import LogisticRegression
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.svm import SVC
-from sklearn.naive_bayes import GaussianNB
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.tree import DecisionTreeClassifier
+| Decisión | Justificación |
+|--------|---------------|
+| **Uso de múltiples modelos** | Comparar enfoques distintos: lineales, basados en árboles y basados en distancia. |
+| **Separación de datos escalados vs. sin escalar** | Aprovechar el rendimiento óptimo de cada modelo según su sensibilidad a la escala. |
+| **Pesos de clase (`class_weight='balanced'`)** | Manejar el desbalance de clases sin sobre-muestreo agresivo. |
+| **Evaluación con F1-Score** | Métrica ideal para problemas desbalanceados (equilibrio entre precision y recall). |
+| **Permutation Importance** | Permitir interpretación de modelos que no tienen `feature_importances_` (ej. SVM). |
 
-# Catálogo de modelos
-MODELS = {
-    'Logistic Regression': {'class': LogisticRegression, 'params': {'C': 1, 'max_iter': 1000}, 'data': 'scaled'},
-    'KNN': {'class': KNeighborsClassifier, 'params': {'n_neighbors': 5}, 'data': 'scaled'},
-    'SVM': {'class': SVC, 'params': {'kernel': 'rbf', 'probability': True}, 'data': 'scaled'},
-    'Naive Bayes': {'class': GaussianNB, 'params': {}, 'data': 'scaled'},
-    'Random Forest': {'class': RandomForestClassifier, 'params': {'n_estimators': 100}, 'data': 'raw'},
-    'Decision Tree': {'class': DecisionTreeClassifier, 'params': {'max_depth': 8}, 'data': 'raw'},
-    'Gradient Boosting': {'class': GradientBoostingClassifier, 'params': {'n_estimators': 100}, 'data': 'raw'}
-}
+---
 
-# Entrenar
-model_results = {}
-for name, config in MODELS.items():
-    X_tr = X_train_scaled if config['data'] == 'scaled' else X_train
-    X_te = X_test_scaled if config['data'] == 'scaled' else X_test
-    model = config['class'](**config['params'])
-    start = datetime.now()
-    model.fit(X_tr, y_train)
-    elapsed = (datetime.now() - start).total_seconds()
-    y_pred = model.predict(X_te)
-    y_proba = model.predict_proba(X_te)[:, 1] if hasattr(model, 'predict_proba') else None
-    model_results[name] = {
-        'model': model, 'X_train': X_tr, 'X_test': X_te, 'y_pred': y_pred, 'y_proba': y_proba,
-        'training_time': elapsed, 'data_type': config['data']
-    }
-    print(f" {name} entrenado en {elapsed:.2f}s")
+## Ejemplos de Gráficos e Insights del EDA
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  4. EVALUACIÓN DE MODELOS
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+### Insights Clave
 
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
+- **Los clientes con contrato mes a mes tienen 3.5x más probabilidad de churn.**
+- **Clientes con fibra óptica presentan tasas de churn más altas** (posiblemente por problemas de servicio).
+- **El tiempo como cliente (`tenure`) es la variable más predictiva**: a menor tenure, mayor riesgo.
+- **Pagos con cheque electrónico están fuertemente asociados al churn.**
 
-evaluation_results = {}
-for name, res in model_results.items():
-    acc = accuracy_score(y_test, res['y_pred'])
-    prec = precision_score(y_test, res['y_pred'])
-    rec = recall_score(y_test, res['y_pred'])
-    f1 = f1_score(y_test, res['y_pred'])
-    auc = roc_auc_score(y_test, res['y_proba']) if res['y_proba'] is not None else np.nan
-    cm = confusion_matrix(y_test, res['y_pred'])
-    tn, fp, fn, tp = cm.ravel()
-    evaluation_results[name] = {
-        'test_metrics': {'Accuracy': acc, 'Precision': prec, 'Recall': rec, 'F1_Score': f1, 'ROC_AUC': auc, 'Specificity': tn/(tn+fp)},
-        'confusion_matrix': cm,
-        'training_time': res['training_time']
-    }
+###  Visualizaciones Principales
 
-# Tabla comparativa
-comparison_df = pd.DataFrame([
-    {'Modelo': name, **res['test_metrics'], 'Tiempo_s': res['training_time']}
-    for name, res in evaluation_results.items()
-]).round(4)
-comparison_df_sorted = comparison_df.sort_values('F1_Score', ascending=False)
-print("\n📈 Comparación de modelos (ordenado por F1-Score):")
-print(comparison_df_sorted[['Modelo', 'Accuracy', 'Precision', 'Recall', 'F1_Score', 'ROC_AUC']].to_string(index=False))
+| Gráfico | Descripción |
+|-------|-------------|
+| **Distribución de Churn** | Muestra desbalance moderado (73% No Churn, 27% Churn). |
+| **Matriz de Correlación** | Destaca variables como `tenure`, `Contract`, y `MonthlyCharges` como altamente correlacionadas con churn. |
+| **Top Features (Ranking Consolidado)** | Muestra las variables más consistentes entre múltiples modelos. |
+| **Curvas ROC** | Compara el rendimiento de todos los modelos (AUC > 0.8 para los mejores). |
+| **Matrices de Confusión** | Muestra verdaderos positivos y falsos negativos clave para estrategias de retención. |
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  5. INTERPRETACIÓN DE MODELOS
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+---
 
-from sklearn.inspection import permutation_importance
+## Instrucciones para Ejecutar el Cuaderno
 
-feature_importances = {}
-for name, res in model_results.items():
-    model, X_te = res['model'], res['X_test']
-    importance = None
-    if hasattr(model, 'feature_importances_'):
-        importance = model.feature_importances_
-    elif hasattr(model, 'coef_'):
-        importance = np.abs(model.coef_[0])
-    else:
-        try:
-            imp = permutation_importance(model, X_te.sample(500, random_state=42), y_test.loc[X_te.index][:500], n_repeats=5, random_state=42)
-            importance = imp.importances_mean
-        except:
-            continue
-    if importance is not None:
-        df_imp = pd.DataFrame({'Feature': X_te.columns, 'Importance': importance}).sort_values('Importance', ascending=False)
-        feature_importances[name] = df_imp
+### 1. **Requisitos del Sistema**
 
-# Consolidación
-rankings = []
-for name, df_imp in feature_importances.items():
-    for rank, (_, row) in enumerate(df_imp.iterrows()):
-        rankings.append({'Feature': row['Feature'], 'Rank': rank + 1})
-rank_df = pd.DataFrame(rankings)
-consolidated = rank_df.groupby('Feature').agg({'Rank': 'mean', 'Feature': 'count'}).rename(columns={'Rank': 'Avg_Rank', 'Feature': 'Models_Count'}).sort_values('Avg_Rank')
-top_important_features = consolidated.head(10).index.tolist()
-print(f"\n Top 10 variables más importantes: {', '.join(top_important_features[:5])}, ...")
+Asegúrate de tener instalado **Python 3.8+** y las siguientes bibliotecas:
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  6. CONCLUSIONES Y RECOMENDACIONES
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+pandas
 
-best_model_name = comparison_df_sorted.iloc[0]['Modelo']
-best_metrics = evaluation_results[best_model_name]['test_metrics']
-cm = evaluation_results[best_model_name]['confusion_matrix']
-tp, fp, fn, tn = cm.ravel()
+numpy
 
-print("\n" + " CONCLUSIONES ESTRATÉGICAS".center(80))
-print("=" * 80)
-print(f"MODELO SELECCIONADO: {best_model_name}")
-print(f"   • F1-Score: {best_metrics['F1_Score']:.4f}")
-print(f"   • Recall: {best_metrics['Recall']:.1%} (detecta {tp} churn reales)")
-print(f"   • Precision: {best_metrics['Precision']:.1%} ({fp} falsas alarmas)")
-print(f"   • Accuracy: {best_metrics['Accuracy']:.1%}")
+matplotlib
 
-print(f"\n FACTORES CLAVE DE CHURN:")
-business_names = {
-    'tenure': 'Tiempo como cliente',
-    'MonthlyCharges': 'Cargo mensual',
-    'Contract_Month-to-month': 'Contrato mes a mes',
-    'PaymentMethod_Electronic check': 'Pago con cheque electrónico',
-    'InternetService_Fiber optic': 'Fibra óptica'
-}
-for feat in top_important_features[:5]:
-    name = business_names.get(feat, feat.replace('_', ' ').title())
-    direction = "↑ Aumenta churn" if feat in ['Contract_Month-to-month', 'MonthlyCharges'] else "↓ Reduce churn"
-    print(f"   • {name} ({direction})")
+seaborn
 
-print(f"\n ESTRATEGIAS DE RETENCIÓN:")
-strategies = [
-    "Implementar sistema de scoring predictivo con modelo entrenado",
-    "Alertas para clientes con >70% probabilidad de churn",
-    "Ofertas para migrar contratos mes a mes a anuales",
-    "Programa de onboarding para clientes nuevos (<12 meses)"
-]
-for s in strategies:
-    print(f"   • {s}")
+scikit-learn
 
-# ROI estimado
-revenue_saved = int(tp * 0.3 * 65 * 12)  # 30% retención, $65/mes
-roi = (revenue_saved - 150000) / 150000
-print(f"\n ROI ESTIMADO: {roi:+.1%} (${revenue_saved:,} ingresos salvados)")
+imbalanced-learn
 
-print(f"\n ANÁLISIS COMPLETADO. Modelo listo para producción.")
+2. Ejecución del Cuaderno
+   
+Coloca el archivo TelecomX_Data.json en la misma carpeta del cuaderno.
 
+Abre el cuaderno con Jupyter:
+
+jupyter notebook notebook_churn_prediction.ipynb
+
+Ejecuta todas las celdas en orden.
+
+4. Carga de Datos Tratados (CSV)
+   
+Si deseas saltar la limpieza y usar el dataset ya procesado
+
+df_final = pd.read_csv('telecomx_data_clean.csv')
+
+Este CSV contiene todas las variables codificadas, normalizadas y listas para modelado.
+
+## Resultado Final
+
+El modelo Random Forest fue seleccionado como el mejor según el F1-Score, con un rendimiento robusto y buena interpretabilidad. Se proyecta un ROI positivo en el primer año al implementar un sistema de retención proactiva basado en este modelo.
+
+## Contacto
+
+Proyecto desarrollado como parte de un análisis de ciencia de datos aplicada.
+
+Para consultas o colaboraciones: gomezdiego1902@gmail.com
