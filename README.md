@@ -17,21 +17,37 @@ Este análisis forma parte de una solución integral de inteligencia predictiva 
 
 ##  Estructura del Proyecto
 TelecomX-Churn-Prediction/
+
 │
+
 ├── TelecomX_Data.json # Datos originales en formato JSON (anidados)
+
 ├── telecomx_data_clean.csv # Dataset procesado y aplanado (listo para ML)
+
 ├── notebook_churn_prediction.ipynb # Cuaderno principal con todo el flujo de análisis
+
 │
+
 ├── visualizaciones/ # Carpeta con gráficos exportados
+
 │ ├── balanceo_clases.png
+
 │ ├── correlaciones.png
+
 │ ├── importancia_variables.png
+
 │ ├── curvas_roc.png
+
 │ └── resumen_ejecutivo.png
+
 │
-├── modelos/ # Modelos entrenados (opcional)
+
+├── modelos/ # Modelos entrenados
+
 │ └── best_model.pkl
+
 │
+
 └── README.md # Documentación del proyecto
 
 ---
@@ -157,3 +173,4 @@ El modelo Random Forest fue seleccionado como el mejor según el F1-Score, con u
 Proyecto desarrollado como parte de un análisis de ciencia de datos aplicada.
 
 Para consultas o colaboraciones: gomezdiego1902@gmail.com
+
